@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monitoring Temuan Proses — TP / PTKP</title>
+<script>
+/* Penangkap error versi lama (ES5) — tetap jalan walau script utama gagal di browser lama */
+window.onerror = function (msg) {
+  var w = document.getElementById("js-warning");
+  if (w) {
+    w.style.display = "block";
+    w.innerHTML = "⚠️ <b>Ada error JavaScript:</b> " + msg + "<br>Silakan buka file ini memakai <b>Chrome versi terbaru</b> (bukan penampil/preview file), lalu kirim pesan error ini ke pembuat app.";
+  }
+  return false;
+};
+</script>
+<style>
+  :root{
+    --navy:#0e3a5d; --blue:#1565c0; --ink:#17222c; --muted:#66788a; --line:#dbe3ec;
+    --bg:#eef2f6; --card:#fff; --ok:#128c4a; --danger:#c0392b; --warn:#b45309;
+    --radius:14px; --shadow:0 2px 10px rgba(14,58,93,.08);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+       background:var(--bg); color:var(--ink); font-size:15px; line-height:1.45; padding-bottom:118px}
+  button{font:inherit; cursor:pointer}
+  input,select,textarea{font:inherit}
+  header{position:sticky; top:0; z-index:30; background:var(--navy); color:#fff; padding:14px 16px 12px;
+         box-shadow:0 2px 12px rgba(0,0,0,.18)}
+  header h1{margin:0; font-size:18px; font-weight:700}
+  header p{margin:2px 0 10px; font-size:12.5px; opacity:.85}
+  .stats{display:flex; gap:6px}
+  .stat{flex:1; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
+        border-radius:10px; padding:7px 4px; text-align:center}
+  .stat b{display:block; font-size:17px; line-height:1.15}
+  .stat span{font-size:10px; opacity:.85; text-transform:uppercase; letter-spacing:.3px}
+  .tabs{display:flex; gap:6px; margin-top:10px}
+  .tab{flex:1; border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:10px;
+       padding:8px 4px; font-weight:700; font-size:13.5px; opacity:.8}
+  .tab.active{background:#fff; color:var(--navy); opacity:1}
+  main{max-width:640px; margin:0 auto; padding:12px}
+  .view{display:none} .view.active{display:block}
+
+  .toolbar{display:flex; gap:8px; margin-bottom:8px}
+  .search{flex:1; display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--line);
+          border-radius:10px; padding:0 10px; box-shadow:var(--shadow)}
+  .search input{flex:1; border:0; outline:0; padding:10px 0; background:transparent; min-width:0}
+  select.sort{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:0 8px; box-shadow:var(--shadow); max-width:132px}
+  .chips{display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .fchip{flex:none; border:1px solid var(--line); background:var(--card); color:var(--muted); border-radius:999px;
+         padding:6px 12px; font-size:12.5px; font-weight:700}
+  .fchip.active{background:var(--navy); color:#fff; border-color:var(--navy)}
+  .fchip .cnt{opacity:.75; font-weight:600}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+        padding:12px; margin-bottom:10px; box-shadow:var(--shadow)}
+  .tp-top{display:flex; align-items:flex-start; gap:8px}
+  .tp-no{flex:1; font-weight:800; font-size:15.5px; color:var(--navy); overflow-wrap:anywhere; min-width:0}
+  .badge{flex:none; font-size:11px; font-weight:800; padding:4px 9px; border-radius:999px; color:#fff; letter-spacing:.2px}
+  .tp-meta{font-size:12.5px; color:var(--muted); margin:3px 0 6px}
+  .tp-meta .age{font-weight:700; color:var(--navy)}
+  .tp-meta .age.late{color:var(--danger)}
+  .uraian{margin:0 0 8px; overflow-wrap:anywhere}
+  .route{font-size:13px; color:var(--muted); margin-bottom:10px}
+  .route b{color:var(--ink)}
+  .progress{height:7px; background:var(--bg); border-radius:99px; overflow:hidden; margin-bottom:4px}
+  .progress i{display:block; height:100%; border-radius:99px; transition:width .3s}
+  .progress-lbl{font-size:11px; color:var(--muted); margin-bottom:10px}
+  .actions{display:flex; gap:6px; flex-wrap:wrap}
+  .btn{border:0; border-radius:10px; padding:10px 14px; font-weight:700; font-size:14px}
+  .btn-blue{background:var(--blue); color:#fff}
+  .btn-green{background:#1faa55; color:#fff}
+  .btn-next{background:var(--navy); color:#fff; flex:1}
+  .mini-btn{border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:9px;
+            padding:8px 11px; font-size:12.5px; font-weight:700}
+  .mini-btn.del{color:var(--danger)}
+  select.status-sel{flex:1; min-width:130px; border:1px solid var(--line); border-radius:9px; padding:8px; background:#fff; font-weight:600}
+  .history{display:none; border-top:1px dashed var(--line); margin-top:10px; padding-top:8px}
+  .history.open{display:block}
+  .history div{font-size:12.5px; color:var(--muted); padding:3px 0 3px 14px; position:relative}
+  .history div::before{content:"•"; position:absolute; left:3px; color:var(--navy); font-weight:900}
+  .history b{color:var(--ink)}
+  .empty{display:none; text-align:center; color:var(--muted); padding:30px 14px; font-size:14px}
+  .empty.show{display:block}
+
+  /* status master */
+  .s-row{display:flex; align-items:center; gap:9px; background:var(--card); border:1px solid var(--line);
+         border-radius:var(--radius); padding:11px 12px; margin-bottom:8px; box-shadow:var(--shadow)}
+  .dot{flex:none; width:16px; height:16px; border-radius:50%}
+  .s-name{flex:1; font-weight:700; min-width:0; overflow-wrap:anywhere}
+  .s-name small{display:block; font-weight:500; color:var(--muted); font-size:11.5px}
+  .final-tag{font-size:10px; font-weight:800; background:#e6f4ea; color:var(--ok); border-radius:99px; padding:2px 7px; margin-left:6px; vertical-align:2px}
+  .icon-btn{flex:none; width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:#fff; color:var(--muted); font-size:14px}
+  .icon-btn.del{color:var(--danger)}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); margin-bottom:12px}
+  .panel h2{margin:0 0 4px; font-size:15.5px}
+  .panel p.sub{margin:0 0 12px; font-size:12.5px; color:var(--muted)}
+  .field{margin-bottom:11px}
+  .field label{display:block; font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:5px}
+  .field input[type=text],.field input[type=date],.field textarea,.field select{
+    width:100%; border:1px solid var(--line); border-radius:10px; padding:10px; outline-color:var(--blue); background:#fff}
+  .field textarea{min-height:76px; resize:vertical}
+  .colors{display:flex; gap:8px; flex-wrap:wrap}
+  .c-opt{width:34px; height:34px; border-radius:50%; border:3px solid transparent; padding:0}
+  .c-opt.sel{border-color:var(--ink)}
+  .check{display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600}
+  .check input{width:18px; height:18px}
+  .form-actions{display:flex; gap:8px; margin-top:6px}
+  .form-actions .btn{flex:1; padding:12px 8px}
+  .btn-ghost{background:#fff; color:var(--navy); border:1px solid var(--line)}
+
+  .tools{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:16px}
+  .tools .btn{padding:11px 6px; font-size:13px}
+  .danger-row{text-align:center; margin:14px 0 4px}
+  .danger-row button{background:none; border:0; color:var(--danger); font-size:13px; font-weight:600; text-decoration:underline}
+
+  .bottom-bar{position:fixed; left:0; right:0; bottom:0; z-index:30; background:rgba(255,255,255,.97);
+    border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    display:flex; gap:8px; box-shadow:0 -3px 14px rgba(14,58,93,.08)}
+  .bottom-bar .btn{flex:1; padding:13px 8px; font-size:14.5px; border-radius:12px}
+
+  /* modal sheet */
+  .overlay{display:none; position:fixed; inset:0; z-index:40; background:rgba(10,25,40,.55)}
+  .overlay.open{display:block}
+  .sheet{position:absolute; left:0; right:0; bottom:0; max-height:92vh; overflow:auto; background:#fff;
+         border-radius:18px 18px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-width:640px; margin:0 auto}
+  .sheet h2{margin:0 0 12px; font-size:16.5px}
+  @media (min-width:560px){ .sheet{border-radius:18px; top:50%; bottom:auto; transform:translateY(-50%)} }
+
+  #toast{position:fixed; left:50%; bottom:118px; transform:translateX(-50%) translateY(16px); z-index:60;
+    background:#17222c; color:#fff; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600;
+    opacity:0; pointer-events:none; transition:.25s; box-shadow:0 6px 20px rgba(0,0,0,.25); text-align:center; max-width:92vw}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div id="js-warning" style="background:#fdecea;color:#7b1d12;padding:12px 16px;font-size:13.5px;line-height:1.5">
+  ⚠️ <b>JavaScript belum jalan di penampil file ini.</b> Kalau tombol-tombol di bawah tidak merespons, itu penyebabnya — penampil bawaan WhatsApp / aplikasi HTML Viewer sering mematikan JavaScript.<br>
+  👉 Buka file ini memakai <b>Chrome</b>: simpan file → buka aplikasi <b>Files</b> → ketuk file → pilih <b>Buka dengan Chrome</b>. Banner ini akan hilang sendiri kalau app sudah jalan normal.
+</div>
+
+<header>
+  <h1>🔎 Monitoring Temuan Proses</h1>
+  <p>Data TP berdasarkan No. PTKP — pantau statusnya sampai selesai</p>
+  <div class="stats">
+    <div class="stat"><b id="st-total">0</b><span>Total TP</span></div>
+    <div class="stat"><b id="st-aktif">0</b><span>Masih Proses</span></div>
+    <div class="stat"><b id="st-selesai">0</b><span>Selesai</span></div>
+    <div class="stat"><b id="st-lama">0</b><span>&gt; 30 Hari</span></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" id="tab-list" type="button">📋 Data TP</button>
+    <button class="tab" id="tab-status" type="button">🏷️ Master Status</button>
+  </div>
+</header>
+
+<main>
+  <!-- ============ VIEW: DATA TP ============ -->
+  <section class="view active" id="view-list">
+    <div class="toolbar">
+      <label class="search">🔍 <input id="search" type="search" placeholder="Cari No. PTKP, uraian, penerbit, penerima…" autocomplete="off"></label>
+      <select class="sort" id="sort" title="Urutkan">
+        <option value="baru">📅 Terbaru</option>
+        <option value="lama">📅 Terlama</option>
+        <option value="umur">⏳ Umur terlama</option>
+        <option value="no">🔤 No. PTKP</option>
+      </select>
+    </div>
+    <div class="chips" id="filter-chips"></div>
+
+    <section id="list"></section>
+    <div class="empty" id="empty">Belum ada data TP yang cocok.<br>Ketuk <b>+ Input TP</b> untuk menambah data pertama.</div>
+
+    <div class="tools">
+      <button class="btn btn-green" id="btn-wa" type="button">📋 Salin Ringkasan WA</button>
+      <button class="btn btn-ghost" id="btn-csv" type="button">⬇️ Export CSV</button>
+      <button class="btn btn-ghost" id="btn-backup" type="button">💾 Backup JSON</button>
+      <button class="btn btn-ghost" id="btn-restore" type="button">📥 Restore JSON</button>
+      <input type="file" id="file-restore" accept=".json,application/json" hidden>
+    </div>
+    <section id="summary-wrap" hidden style="background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:12px;overflow:hidden">
+      <div style="padding:11px 14px;border-bottom:1px solid var(--line);background:#f8fafc;font-weight:700;font-size:14px">📄 Teks Ringkasan (siap paste ke WA)</div>
+      <pre id="summary-output" style="margin:0;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.6;max-height:380px;overflow:auto"></pre>
+    </section>
+    <div class="danger-row"><button id="btn-wipe" type="button">Hapus semua data TP &amp; reset status</button></div>
+    <p style="text-align:center;font-size:11.5px;color:var(--muted)">Monitoring TP — Versi 3 (tombol WA sekarang menyalin teks ringkasan)</p>
+  </section>
+
+  <!-- ============ VIEW: MASTER STATUS ============ -->
+  <section class="view" id="view-status">
+    <div class="panel">
+      <h2 id="status-form-title">➕ Tambah Status</h2>
+      <p class="sub">Status tampil berurutan sebagai alur proses (dari atas ke bawah). Urutan ini juga menentukan progress bar &amp; tombol “Lanjut” di tiap TP. Status bertanda <b>SELESAI</b> dianggap status akhir.</p>
+      <form id="status-form">
+        <div class="field">
+          <label for="s-name">Nama Status</label>
+          <input type="text" id="s-name" placeholder="cth: Proses Verifikasi" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label>Warna Label</label>
+          <div class="colors" id="s-colors"></div>
+        </div>
+        <div class="field"><label class="check"><input type="checkbox" id="s-final"> Ini status akhir (selesai / closed)</label></div>
+        <div class="form-actions">
+          <button class="btn btn-blue" type="submit" id="s-submit">Simpan Status</button>
+          <button class="btn btn-ghost" type="button" id="s-cancel" hidden>Batal Edit</button>
+        </div>
+      </form>
+    </div>
+    <section id="status-list"></section>
+    <p class="sub" style="font-size:12.5px;color:var(--muted)">Status yang sedang dipakai TP tidak bisa dihapus — pindahkan dulu TP-nya ke status lain, atau hapus TP-nya. Nama status yang diubah otomatis berlaku ke semua TP yang memakainya.</p>
+  </section>
+</main>
+
+<div class="bottom-bar">
+  <button class="btn btn-blue" id="btn-add" type="button">＋ Input TP</button>
+</div>
+
+<!-- ============ MODAL FORM TP ============ -->
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="tp-form-title">＋ Input Temuan Proses</h2>
+    <form id="tp-form">
+      <div class="field">
+        <label for="f-no">No. PTKP *</label>
+        <input type="text" id="f-no" placeholder="cth: PTKP/QA/2026/001" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="f-date">Tanggal *</label>
+        <input type="date" id="f-date" required>
+      </div>
+      <div class="field">
+        <label for="f-uraian">Uraian Temuan *</label>
+        <textarea id="f-uraian" placeholder="Tulis uraian temuan prosesnya…" required></textarea>
+      </div>
+      <div class="field">
+        <label for="f-penerbit">Penerbit *</label>
+        <input type="text" id="f-penerbit" list="dl-penerbit" placeholder="cth: Dept. QC" autocomplete="off" required>
+        <datalist id="dl-penerbit"></datalist>
+      </div>
+      <div class="field">
+        <label for="f-penerima">Penerima *</label>
+        <input type="text" id="f-penerima" list="dl-penerima" placeholder="cth: Dept. Liquid" autocomplete="off" required>
+        <datalist id="dl-penerima"></datalist>
+      </div>
+      <div class="field">
+        <label for="f-status">Status</label>
+        <select id="f-status"></select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" type="button" id="tp-cancel">Batal</button>
+        <button class="btn btn-blue" type="submit" id="tp-save">💾 Simpan TP</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* Script utama jalan -> sembunyikan peringatan JavaScript */
+(function(){ var w = document.getElementById("js-warning"); if (w) w.style.display = "none"; })();
+
+const KEY = "temuanProsesTPV1";
+
+/* Penyimpanan aman: sebagian penampil file memblokir localStorage.
+   Kalau terblokir, pakai memori sementara supaya app tetap berfungsi. */
+const memStore = {};
+let storageOK = false;
+try { localStorage.setItem("__tp_probe__", "1"); localStorage.removeItem("__tp_probe__"); storageOK = true; }
+catch (e) { storageOK = false; }
+function storeGet(k){ if (storageOK) { try { return localStorage.getItem(k); } catch (e) {} } return (k in memStore) ? memStore[k] : null; }
+function storeSet(k, v){ memStore[k] = v; if (storageOK) { try { localStorage.setItem(k, v); } catch (e) {} } }
+const PALETTE = ["#1565c0","#b45309","#7b1fa2","#0f766e","#be123c","#4d7c0f","#0369a1","#a16207","#334155","#128c4a"];
+
+const DEFAULTS = {
+  statuses: [
+    {id:"st1", name:"TP Diterima", color:"#1565c0", final:false},
+    {id:"st2", name:"Proses TP",    color:"#b45309", final:false},
+    {id:"st3", name:"Proses BAP",   color:"#7b1fa2", final:false},
+    {id:"st4", name:"Selesai",      color:"#128c4a", final:true}
+  ],
+  items: [
+    {id:"contoh1", no:"CONTOH-001 (hapus saja)", date:daysAgoISO(12), uraian:"Contoh data: temuan proses pada area produksi, menunggu tindak lanjut dari penerima.",
+     penerbit:"Dept. QC", penerima:"Dept. Liquid", statusId:"st2", createdAt:Date.now()-86400000*12,
+     history:[{ts:Date.now()-86400000*12, text:"TP dibuat — status Proses TP"}]},
+    {id:"contoh2", no:"CONTOH-002 (hapus saja)", date:daysAgoISO(3), uraian:"Contoh data kedua: temuan baru yang baru diterima dan belum diproses.",
+     penerbit:"Dept. QA", penerima:"Logistik", statusId:"st1", createdAt:Date.now()-86400000*3,
+     history:[{ts:Date.now()-86400000*3, text:"TP dibuat — status TP Diterima"}]}
+  ]
+};
+
+let db = load();
+let filterStatus = "all";
+let editingTpId = null;
+let editingStatusId = null;
+let selectedColor = PALETTE[0];
+
+function daysAgoISO(n){ const d=new Date(); d.setDate(d.getDate()-n);
+  const mm=("0"+(d.getMonth()+1)).slice(-2), dd=("0"+d.getDate()).slice(-2);
+  return d.getFullYear()+"-"+mm+"-"+dd; }
+function uid(){ return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "id"+Date.now()+Math.floor(Math.random()*1e6); }
+function load(){
+  try{
+    const raw = storeGet(KEY);
+    if(raw){ const d = JSON.parse(raw); if(d && Array.isArray(d.statuses) && Array.isArray(d.items) && d.statuses.length) return sanitize(d); }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULTS));
+}
+function sanitize(d){
+  const statuses = d.statuses.filter(s=>s && s.name).map(s=>({id:String(s.id||uid()), name:String(s.name).trim(),
+    color:PALETTE.includes(s.color)?s.color:"#334155", final:!!s.final}));
+  const validIds = new Set(statuses.map(s=>s.id));
+  const items = d.items.filter(x=>x && x.no).map(x=>({
+    id:String(x.id||uid()), no:String(x.no).trim(), date:String(x.date||daysAgoISO(0)),
+    uraian:String(x.uraian||""), penerbit:String(x.penerbit||""), penerima:String(x.penerima||""),
+    statusId: validIds.has(x.statusId) ? x.statusId : statuses[0].id,
+    createdAt: x.createdAt||Date.now(),
+    history: Array.isArray(x.history) ? x.history.filter(h=>h && h.text).map(h=>({ts:h.ts||Date.now(), text:String(h.text)})) : []
+  }));
+  return {statuses, items};
+}
+function save(){ storeSet(KEY, JSON.stringify(db)); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function statusById(id){ return db.statuses.find(s=>s.id===id) || db.statuses[0]; }
+function fmtDate(iso){
+  const d = new Date(iso+"T00:00:00");
+  return isNaN(d) ? iso : d.toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"});
+}
+function ageDays(iso){
+  const a = new Date(iso+"T00:00:00"); if(isNaN(a)) return 0;
+  const now = new Date(); now.setHours(0,0,0,0);
+  return Math.max(0, Math.round((now - a)/86400000));
+}
+
+/* ================= RENDER: TP ================= */
+const listEl = document.getElementById("list");
+function render(){
+  /* stats */
+  const selesaiIds = new Set(db.statuses.filter(s=>s.final).map(s=>s.id));
+  const aktif = db.items.filter(x=>!selesaiIds.has(x.statusId));
+  document.getElementById("st-total").textContent = db.items.length;
+  document.getElementById("st-aktif").textContent = aktif.length;
+  document.getElementById("st-selesai").textContent = db.items.length - aktif.length;
+  document.getElementById("st-lama").textContent = aktif.filter(x=>ageDays(x.date)>30).length;
+
+  /* filter chips */
+  const chips = [`<button type="button" class="fchip ${filterStatus==="all"?"active":""}" data-filter="all">Semua <span class="cnt">(${db.items.length})</span></button>`]
+    .concat(db.statuses.map(s=>{
+      const n = db.items.filter(x=>x.statusId===s.id).length;
+      return `<button type="button" class="fchip ${filterStatus===s.id?"active":""}" data-filter="${s.id}">${esc(s.name)} <span class="cnt">(${n})</span></button>`;
+    }));
+  document.getElementById("filter-chips").innerHTML = chips.join("");
+
+  /* items */
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const sort = document.getElementById("sort").value;
+  let items = db.items.filter(x=>{
+    if(filterStatus!=="all" && x.statusId!==filterStatus) return false;
+    if(q && !(x.no+" "+x.uraian+" "+x.penerbit+" "+x.penerima).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  items.sort((a,b)=>{
+    if(sort==="baru") return b.date.localeCompare(a.date) || b.createdAt-a.createdAt;
+    if(sort==="lama") return a.date.localeCompare(b.date) || a.createdAt-b.createdAt;
+    if(sort==="umur") return a.date.localeCompare(b.date);
+    return a.no.localeCompare(b.no, "id");
+  });
+
+  listEl.innerHTML = items.map(x=>{
+    const st = statusById(x.statusId);
+    const idx = db.statuses.findIndex(s=>s.id===st.id);
+    const pct = db.statuses.length<=1 ? 100 : Math.round(idx/(db.statuses.length-1)*100);
+    const age = ageDays(x.date);
+    const isFinal = !!st.final;
+    const late = !isFinal && age>30;
+    const next = db.statuses[idx+1];
+    const opts = db.statuses.map(s=>`<option value="${s.id}" ${s.id===x.statusId?"selected":""}>${esc(s.name)}</option>`).join("");
+    const hist = x.history.slice().reverse().map(h=>
+      `<div><b>${new Date(h.ts).toLocaleString("id-ID",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</b> — ${esc(h.text)}</div>`).join("");
+    return `<article class="card">
+      <div class="tp-top">
+        <span class="tp-no">${esc(x.no)}</span>
+        <span class="badge" style="background:${st.color}">${esc(st.name)}</span>
+      </div>
+      <div class="tp-meta">📅 ${fmtDate(x.date)} · <span class="age ${late?"late":""}">${isFinal ? "selesai" : "umur "+age+" hari"}${late ? " ⚠️" : ""}</span></div>
+      <p class="uraian">${esc(x.uraian)}</p>
+      <div class="route">Penerbit: <b>${esc(x.penerbit)}</b> &nbsp;→&nbsp; Penerima: <b>${esc(x.penerima)}</b></div>
+      <div class="progress"><i style="width:${pct}%;background:${st.color}"></i></div>
+      <div class="progress-lbl">Langkah ${idx+1} dari ${db.statuses.length} — ${esc(st.name)}</div>
+      <div class="actions">
+        <select class="status-sel" data-status-for="${x.id}" title="Ganti status">${opts}</select>
+        ${next ? `<button type="button" class="btn btn-next" data-next="${x.id}">Lanjut ▶ ${esc(next.name)}</button>` : ""}
+      </div>
+      <div class="actions" style="margin-top:6px">
+        <button type="button" class="mini-btn" data-hist="${x.id}">🕘 Riwayat</button>
+        <button type="button" class="mini-btn" data-edit="${x.id}">✎ Edit</button>
+        <button type="button" class="mini-btn del" data-del="${x.id}">✕ Hapus</button>
+      </div>
+      <div class="history" id="hist-${x.id}">${hist || "<div>Belum ada riwayat.</div>"}</div>
+    </article>`;
+  }).join("");
+  document.getElementById("empty").classList.toggle("show", items.length===0);
+
+  /* datalist saran penerbit/penerima */
+  const uniq = k => [...new Set(db.items.map(x=>x[k]).filter(Boolean))];
+  document.getElementById("dl-penerbit").innerHTML = uniq("penerbit").map(v=>`<option value="${esc(v)}">`).join("");
+  document.getElementById("dl-penerima").innerHTML = uniq("penerima").map(v=>`<option value="${esc(v)}">`).join("");
+
+  renderStatuses();
+  save();
+}
+
+/* ================= RENDER: STATUS ================= */
+function renderStatuses(){
+  const el = document.getElementById("status-list");
+  el.innerHTML = db.statuses.map((s,i)=>{
+    const n = db.items.filter(x=>x.statusId===s.id).length;
+    return `<div class="s-row">
+      <span class="dot" style="background:${s.color}"></span>
+      <span class="s-name">${i+1}. ${esc(s.name)}${s.final?'<span class="final-tag">SELESAI</span>':""}
+        <small>dipakai ${n} TP</small></span>
+      <button type="button" class="icon-btn" data-smove="${s.id}:-1" title="Naik">↑</button>
+      <button type="button" class="icon-btn" data-smove="${s.id}:1" title="Turun">↓</button>
+      <button type="button" class="icon-btn" data-sedit="${s.id}" title="Edit">✎</button>
+      <button type="button" class="icon-btn del" data-sdel="${s.id}" title="Hapus">✕</button>
+    </div>`;
+  }).join("");
+  /* pilihan warna */
+  document.getElementById("s-colors").innerHTML = PALETTE.map(c=>
+    `<button type="button" class="c-opt ${c===selectedColor?"sel":""}" data-color="${c}" style="background:${c}" title="${c}"></button>`).join("");
+  /* select status di form TP */
+  document.getElementById("f-status").innerHTML = db.statuses.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");
+}
+
+/* ================= EVENTS: TP ================= */
+document.getElementById("filter-chips").addEventListener("click", e=>{
+  const b = e.target.closest("[data-filter]"); if(!b) return;
+  filterStatus = b.dataset.filter; render();
+});
+document.getElementById("search").addEventListener("input", render);
+document.getElementById("sort").addEventListener("change", render);
+
+listEl.addEventListener("change", e=>{
+  const sel = e.target.closest("[data-status-for]"); if(!sel) return;
+  setStatus(sel.dataset.statusFor, sel.value);
+});
+listEl.addEventListener("click", e=>{
+  const nx = e.target.closest("[data-next]");
+  if(nx){
+    const x = db.items.find(i=>i.id===nx.dataset.next);
+    const idx = db.statuses.findIndex(s=>s.id===x.statusId);
+    if(db.statuses[idx+1]) setStatus(x.id, db.statuses[idx+1].id);
+    return;
+  }
+  const hb = e.target.closest("[data-hist]");
+  if(hb){ document.getElementById("hist-"+hb.dataset.hist).classList.toggle("open"); return; }
+  const ed = e.target.closest("[data-edit]");
+  if(ed){ openTpForm(ed.dataset.edit); return; }
+  const del = e.target.closest("[data-del]");
+  if(del){
+    const x = db.items.find(i=>i.id===del.dataset.del);
+    if(confirm(`Hapus TP "${x.no}"? Data tidak bisa dikembalikan.`)){
+      db.items = db.items.filter(i=>i.id!==x.id); render(); toast("TP dihapus");
+    }
+  }
+});
+function setStatus(itemId, statusId){
+  const x = db.items.find(i=>i.id===itemId); if(!x || x.statusId===statusId) { render(); return; }
+  const from = statusById(x.statusId).name, to = statusById(statusId).name;
+  x.statusId = statusId;
+  x.history.push({ts:Date.now(), text:`Status berubah: ${from} → ${to}`});
+  render(); toast(`Status ${x.no} → ${to} ✓`);
+}
+
+/* ================= FORM TP ================= */
+const overlay = document.getElementById("overlay");
+function openTpForm(id){
+  editingTpId = id || null;
+  const f = document.getElementById("tp-form");
+  f.reset();
+  document.getElementById("tp-form-title").textContent = id ? "✎ Edit Temuan Proses" : "＋ Input Temuan Proses";
+  if(id){
+    const x = db.items.find(i=>i.id===id);
+    document.getElementById("f-no").value = x.no;
+    document.getElementById("f-date").value = x.date;
+    document.getElementById("f-uraian").value = x.uraian;
+    document.getElementById("f-penerbit").value = x.penerbit;
+    document.getElementById("f-penerima").value = x.penerima;
+    renderStatuses();
+    document.getElementById("f-status").value = x.statusId;
+  } else {
+    document.getElementById("f-date").value = daysAgoISO(0);
+    renderStatuses();
+  }
+  overlay.classList.add("open");
+}
+function closeTpForm(){ overlay.classList.remove("open"); editingTpId = null; }
+document.getElementById("btn-add").addEventListener("click", ()=>openTpForm(null));
+document.getElementById("tp-cancel").addEventListener("click", closeTpForm);
+overlay.addEventListener("click", e=>{ if(e.target===overlay) closeTpForm(); });
+
+let lastSaveAt = 0;
+document.getElementById("tp-form").addEventListener("submit", e=>{
+  e.preventDefault();
+  doSaveTp();
+});
+/* Cadangan: sebagian penampil file tidak memicu event submit dengan benar.
+   Klik tombol Simpan juga memanggil fungsi yang sama (dijaga anti-dobel). */
+document.getElementById("tp-save").addEventListener("click", ()=>{
+  setTimeout(()=>{ if (overlay.classList.contains("open")) doSaveTp(); }, 0);
+});
+function doSaveTp(){
+  const now = Date.now();
+  if (now - lastSaveAt < 800) return;
+  lastSaveAt = now;
+  const no = document.getElementById("f-no").value.trim();
+  const date = document.getElementById("f-date").value;
+  const uraian = document.getElementById("f-uraian").value.trim();
+  const penerbit = document.getElementById("f-penerbit").value.trim();
+  const penerima = document.getElementById("f-penerima").value.trim();
+  const statusId = document.getElementById("f-status").value || db.statuses[0].id;
+  if(!no || !date || !uraian || !penerbit || !penerima){ toast("Lengkapi semua kolom bertanda *"); return; }
+  const dup = db.items.some(x=>x.no.toLowerCase()===no.toLowerCase() && x.id!==editingTpId);
+  if(dup && !confirm(`No. PTKP "${no}" sudah ada. Tetap simpan sebagai data terpisah?`)) return;
+
+  if(editingTpId){
+    const x = db.items.find(i=>i.id===editingTpId);
+    const oldStatus = x.statusId;
+    Object.assign(x, {no, date, uraian, penerbit, penerima, statusId});
+    x.history.push({ts:Date.now(), text: oldStatus!==statusId
+      ? `Data diubah & status: ${statusById(oldStatus).name} → ${statusById(statusId).name}`
+      : "Data diubah"});
+    toast("TP diperbarui ✓");
+  } else {
+    db.items.unshift({id:uid(), no, date, uraian, penerbit, penerima, statusId, createdAt:Date.now(),
+      history:[{ts:Date.now(), text:`TP dibuat — status ${statusById(statusId).name}`}]});
+    toast("TP baru tersimpan ✓");
+  }
+  closeTpForm(); filterStatus = "all"; render();
+}
+
+/* ================= CRUD STATUS ================= */
+document.getElementById("s-colors").addEventListener("click", e=>{
+  const b = e.target.closest("[data-color]"); if(!b) return;
+  selectedColor = b.dataset.color; renderStatuses();
+});
+document.getElementById("status-form").addEventListener("submit", e=>{
+  e.preventDefault();
+  const name = document.getElementById("s-name").value.trim();
+  const fin = document.getElementById("s-final").checked;
+  if(!name) return;
+  const dup = db.statuses.some(s=>s.name.toLowerCase()===name.toLowerCase() && s.id!==editingStatusId);
+  if(dup){ toast("Nama status itu sudah ada"); return; }
+  if(editingStatusId){
+    Object.assign(statusById(editingStatusId), {name, color:selectedColor, final:fin});
+    toast("Status diperbarui ✓");
+  } else {
+    db.statuses.push({id:uid(), name, color:selectedColor, final:fin});
+    toast("Status baru ditambahkan ✓");
+  }
+  resetStatusForm(); render();
+});
+function resetStatusForm(){
+  editingStatusId = null; selectedColor = PALETTE[0];
+  document.getElementById("status-form").reset();
+  document.getElementById("status-form-title").textContent = "➕ Tambah Status";
+  document.getElementById("s-submit").textContent = "Simpan Status";
+  document.getElementById("s-cancel").hidden = true;
+  renderStatuses();
+}
+document.getElementById("s-cancel").addEventListener("click", resetStatusForm);
+document.getElementById("status-list").addEventListener("click", e=>{
+  const mv = e.target.closest("[data-smove]");
+  if(mv){
+    const [id,dir] = mv.dataset.smove.split(":"); const i = db.statuses.findIndex(s=>s.id===id);
+    const j = i + Number(dir); if(j<0 || j>=db.statuses.length) return;
+    [db.statuses[i], db.statuses[j]] = [db.statuses[j], db.statuses[i]];
+    render(); toast("Urutan status diubah"); return;
+  }
+  const ed = e.target.closest("[data-sedit]");
+  if(ed){
+    const s = statusById(ed.dataset.sedit);
+    editingStatusId = s.id; selectedColor = s.color;
+    document.getElementById("s-name").value = s.name;
+    document.getElementById("s-final").checked = s.final;
+    document.getElementById("status-form-title").textContent = "✎ Edit Status";
+    document.getElementById("s-submit").textContent = "Simpan Perubahan";
+    document.getElementById("s-cancel").hidden = false;
+    renderStatuses();
+    document.getElementById("s-name").focus();
+    window.scrollTo({top:0, behavior:"smooth"});
+    return;
+  }
+  const del = e.target.closest("[data-sdel]");
+  if(del){
+    const s = statusById(del.dataset.sdel);
+    const n = db.items.filter(x=>x.statusId===s.id).length;
+    if(db.statuses.length<=1){ toast("Harus ada minimal 1 status"); return; }
+    if(n>0){ toast(`Status "${s.name}" masih dipakai ${n} TP — tidak bisa dihapus`); return; }
+    if(confirm(`Hapus status "${s.name}"?`)){
+      db.statuses = db.statuses.filter(x=>x.id!==s.id);
+      if(filterStatus===s.id) filterStatus = "all";
+      if(editingStatusId===s.id) resetStatusForm();
+      render(); toast("Status dihapus");
+    }
+  }
+});
+
+/* ================= TABS ================= */
+function showView(which){
+  document.getElementById("view-list").classList.toggle("active", which==="list");
+  document.getElementById("view-status").classList.toggle("active", which==="status");
+  document.getElementById("tab-list").classList.toggle("active", which==="list");
+  document.getElementById("tab-status").classList.toggle("active", which==="status");
+  document.getElementById("btn-add").style.display = which==="list" ? "" : "none";
+  window.scrollTo({top:0});
+}
+document.getElementById("tab-list").addEventListener("click", ()=>showView("list"));
+document.getElementById("tab-status").addEventListener("click", ()=>showView("status"));
+
+/* ================= EXPORT / BACKUP ================= */
+function download(name, content, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([content], {type}));
+  a.download = name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+document.getElementById("btn-csv").addEventListener("click", ()=>{
+  const q = v => `"${String(v==null?"":v).replace(/"/g,'""')}"`;
+  const rows = [["No. PTKP","Tanggal","Uraian","Penerbit","Penerima","Status","Umur (hari)"].join(";")];
+  db.items.forEach(x=>rows.push([x.no, x.date, x.uraian, x.penerbit, x.penerima, statusById(x.statusId).name, ageDays(x.date)].map(q).join(";")));
+  download("temuan-proses.csv", "\ufeff"+rows.join("\r\n"), "text/csv;charset=utf-8");
+  toast("CSV diunduh ✓");
+});
+document.getElementById("btn-backup").addEventListener("click", ()=>{
+  download("backup-temuan-proses.json", JSON.stringify(db, null, 2), "application/json");
+  toast("Backup JSON diunduh ✓ Simpan baik-baik ya");
+});
+document.getElementById("btn-restore").addEventListener("click", ()=>document.getElementById("file-restore").click());
+document.getElementById("file-restore").addEventListener("change", e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const d = sanitize(JSON.parse(r.result));
+      if(!d.statuses.length) throw new Error("kosong");
+      if(!confirm("Restore akan MENGGANTI semua data saat ini dengan isi file backup. Lanjut?")) return;
+      db = d; filterStatus = "all"; resetStatusForm(); render(); toast("Restore berhasil ✓");
+    }catch(e2){ toast("File backup tidak valid"); }
+    e.target.value = "";
+  };
+  r.readAsText(f);
+});
+document.getElementById("btn-wa").addEventListener("click", ()=>{
+  const lines = ["*Monitoring Temuan Proses (TP)*",
+    `Total: ${db.items.length} TP`];
+  db.statuses.forEach(s=>{
+    const rows = db.items.filter(x=>x.statusId===s.id);
+    lines.push("", `*${s.name} (${rows.length})*`);
+    if(rows.length) rows.forEach((x,i)=>lines.push(`${i+1}. ${x.no} — ${x.penerima} (${fmtDate(x.date)}, ${ageDays(x.date)} hari)`));
+    else lines.push("- tidak ada -");
+  });
+  lines.push("", "Mohon bantuannya untuk dapat segera difollowup. Terimakasih🙏🏻");
+  const text = lines.join("\n");
+  /* Tombol WA = salin teks saja (seperti tombol Salin Teks di app Checklist).
+     Teks juga ditampilkan di kotak bawah supaya bisa disalin manual
+     kalau clipboard browser kebetulan terblokir. */
+  const wrap = document.getElementById("summary-wrap");
+  document.getElementById("summary-output").textContent = text;
+  wrap.hidden = false;
+  copyTextRobust(text, function(ok){
+    toast(ok ? "Ringkasan tersalin ✓ Tinggal paste di WA"
+             : "Teks ringkasan ditampilkan di bawah — tekan lama teksnya untuk salin manual");
+    if (typeof wrap.scrollIntoView === "function") { try { wrap.scrollIntoView({behavior:"smooth", block:"start"}); } catch (e) {} }
+  });
+});
+function fallbackCopy(text){
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove(); return !!ok;
+  } catch (e) { return false; }
+}
+function copyTextRobust(text, done){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(fallbackCopy(text)); });
+  } else {
+    done(fallbackCopy(text));
+  }
+}
+document.getElementById("btn-wipe").addEventListener("click", ()=>{
+  if(!confirm("Hapus SEMUA data TP dan reset master status ke awal? Tidak bisa dikembalikan.")) return;
+  db = JSON.parse(JSON.stringify(DEFAULTS)); filterStatus = "all"; resetStatusForm(); render();
+  toast("Semua data direset");
+});
+
+/* ================= TOAST ================= */
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), 2300);
+}
+
+render();
+if (!storageOK) toast("⚠️ Penyimpanan browser terblokir di penampil ini — data hanya tersimpan selama halaman dibuka. Buka file ini di Chrome supaya data tersimpan permanen.");
+</script>
+</body>
+</html>
